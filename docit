@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# Relies on my Jupyter Notebook image to build, given
+# it's hefty set of dependencies.
+# TODO Create a Dockerfile just for Matchwell
+docker-compose run --rm notebook make -C matchwell/docs/ html
