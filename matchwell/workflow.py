@@ -9,19 +9,15 @@ Learn to predict hierarchical categories of text.
 The workflow looks like this:
 
 1. Data Acquisition
-
     1. Authorize w/ Gmail
     2. Lookup IDs of labels
     3. Get list of message IDs by label ID
     4. Download all emails
     5. Parse text from email
-
-1. Feature Extraction
-
+2. Feature Extraction
     1. Tokenize
     2. TF-IDF
-
-1. Learn & Predict
+3. Learn & Predict
     1. Train
     2. Cross-Validate
     3. Visualize
@@ -60,7 +56,8 @@ def download_emails(gmail=None, df=None, labels=[]):
     label_ids = [lbl_name_ids[lbl] for lbl in labels]
     # Lookup message IDs associated with labels: labelName => [{message IDs,
     # threadID}]
-    messages = gmail.get_message_ids(label_ids)
+    messages = {label_ids: gmail.list_messages([label_id])
+                for label_id in label_ids}
 
     # Load messages into the DataFrame
     for lbl, msgs in messages.items():

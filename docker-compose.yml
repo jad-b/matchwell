@@ -1,0 +1,21 @@
+version: '2'
+services:
+
+  test:
+    build:
+      dockerfile: Dockerfile.test
+      context: .
+    environment:
+      DISPLAY: ${DISPLAY}
+    volumes:
+      - ./:/src
+      - ~/.Xauthority:/home/jovyan/.Xauthority
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    ipc: host
+    user: jovyan
+    command: >
+      py.test -v -s
+      --pdb
+      --cov matchwell
+      matchwell/tests
+      matchwell/tests/test_gmail.py::test_list_messages

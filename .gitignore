@@ -1,3 +1,5 @@
+# Google creds
+client_secret.json
 # Sphinx HTML
 docs/build
 

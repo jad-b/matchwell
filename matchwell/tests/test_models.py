@@ -1,3 +1,5 @@
+import pytest
+import pandas as pd
 from sklearn.linear_model import SGDClassifier
 from sklearn.naive_bayes import MultinomialNB
 
@@ -5,7 +7,17 @@ from matchwell.measure import report, cv_scores
 from matchwell.models import build_pipeline, grid_search
 
 
-def test_classifiers(data, X, y):
+@pytest.yield_fixture(scope='session')
+def X():
+    yield pd.DataFrame()
+
+
+@pytest.yield_fixture(scope='session')
+def y():
+    yield pd.Series()
+
+
+def test_classifiers(X, y):
     clfs = (
         MultinomialNB(),
         SGDClassifier(loss='hinge', penalty='l2', alpha=1e-3,

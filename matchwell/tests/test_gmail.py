@@ -1,3 +1,15 @@
+import pytest
+
+from matchwell.gmail import Gmail
+
+
+@pytest.yield_fixture(scope='session')
+def gmail():
+    gmail = Gmail()
+    gmail.connect()
+    yield gmail
+
+
 def test_create_label(gmail, data):
     # Setup a test label
     TEST_LABEL_NAME = 'TestLabel'
@@ -14,3 +26,8 @@ def test_create_label(gmail, data):
 
     # Assert
     assert test_label['id'] in recv['labelIds'], recv['labelIds']
+
+
+def test_list_messages(gmail):
+    msgs = gmail.list_messages()
+    assert len(msgs) > 0

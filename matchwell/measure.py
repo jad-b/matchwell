@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.special import expit
 from sklearn import metrics, cross_validation
 
 
@@ -22,3 +23,13 @@ def cv_scores(clf, X, y, cv=5, plot=False):
             plt.xlim(0, 7)
             plt.ylim(.0, 1.)
     return scores
+
+
+def show_confidence(clf, X, plot=False):
+    """Analyze prediction confidence."""
+    confs = clf.decision_function(X)
+    if plot:
+        plt.hist(confs, bins=20)
+    # Maybe a scatter plot w/ different coloring per label to show
+    # mis-categorization, which hopefully is contained close to zero.
+    print(np.array_str(expit(confs) * 100, precision=2))

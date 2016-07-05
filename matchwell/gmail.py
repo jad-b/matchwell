@@ -6,13 +6,17 @@ Tools for common operations involving Gmail's API.
 import argparse
 import base64
 import email
+import json
 import os
+import time
 
 import httplib2
 import oauth2client
 from apiclient import discovery, errors
 from bs4 import BeautifulSoup
 from oauth2client import client, tools
+
+from matchwell import util
 
 
 class Gmail:
@@ -36,6 +40,16 @@ class Gmail:
         self.credentials = credentials
         self.user = user_id
         self.service = service
+
+    def connect(self):
+        """Creates a Gmail API service object."""
+        flags = argparse.ArgumentParser(parents=[tools.argparser]).parse_args([
+            '--noauth_local_webserver'
+        ])
+        credentials = self.get_credentials(flags)
+        http = credentials.authorize(httplib2.Http())
+        self.service = discovery.build('gmail', 'v1', http=http)
+        return self
 
     def get_credentials(self, flags=None):
         """Gets valid user credentials from storage.
@@ -64,19 +78,6 @@ class Gmail:
                 credentials = tools.run(flow, store)
             print('Storing credentials to ' + credential_path)
         return credentials
-
-    def build_service(self):
-        """Shows basic usage of the Gmail API.
-
-        Creates a Gmail API service object and outputs a list of label names
-        of the user's Gmail account.
-        """
-        flags = argparse.ArgumentParser(parents=[tools.argparser]).parse_args([
-            '--noauth_local_webserver'
-        ])
-        credentials = self.get_credentials(flags)
-        http = credentials.authorize(httplib2.Http())
-        self.service = discovery.build('gmail', 'v1', http=http)
 
     def get_label_ids(self, labels=[]):
         """Retrieve the label ID for each label."""
@@ -111,41 +112,70 @@ class Gmail:
                             if l['name'] == name)
             raise
 
-    # Retrieve all messages under each label
-    def get_message_ids(self, labels=[]):
-        d = {}
-        for label in labels:
-            print("Retrieving all messages with label(s) '{}'".format(label))
-            try:
-                response = self.service.users().messages().list(
-                    userId=self.user, labelIds=[label]
+    def print_label_tree(self):
+        """Print a JSON representation of your label hierarchy."""
+        labels = self.service.users().labels().list(userId=self.user).execute()
+        label_names = set([l['name'] for l in labels['labels']])
+        label_tree = util.build_prefix_tree(label_names)
+        print(json.dumps(label_tree, indent=2))
+
+    def list_messages(self, label_ids=None, limit=None):
+        """Retrieve a list of {msgId, threadId} by label ID(s).
+
+        No label ID means *all* messages.
+        """
+        list_kwargs = {'userId': self.user}
+        if label_ids is not None:
+            list_kwargs['labelIds'] = label_ids
+            print("Retrieving all messages with label ID(s) '{}'"
+                  .format(label_ids))
+        else:
+            print("Retrieving ALL messages")
+
+        messages, start = [], time.clock()
+        try:
+            response = self.service.users().messages().list(
+                    **list_kwargs
                 ).execute()
-                d[label] = []
-                if 'messages' in response:
-                    d[label].extend(response['messages'])
 
-                while 'nextPageToken' in response:
-                    page_token = response['nextPageToken']
-                    response = self.service.users().messages().list(
-                        userId=self.user, labelIds=[label],
-                        pageToken=page_token
+            count = 0
+            if 'messages' in response:
+                messages.extend(response['messages'])
+                print("Retrieved %d message IDs in %.3f seconds" %
+                      (response['resultSizeEstimate'], time.clock() - start))
+                count += response['resultSizeEstimate']
+
+            while 'nextPageToken' in response:
+                now = time.clock()
+                list_kwargs['pageToken'] = response['nextPageToken']
+                response = self.service.users().messages().list(
+                        **list_kwargs
                     ).execute()
-                    d[label].extend(response['messages'])
-                print("Retrieved {:d} messages".format(len(d[label])))
-            except errors.HttpError as e:
-                print("Error: ", e)
-                return None
-        return d
+                messages.extend(response['messages'])
+                count += response['resultSizeEstimate']
+                print("Retrieved another %d message IDs in %.3f seconds" %
+                      (response['resultSizeEstimate'], time.clock() - now))
+                if limit is not None and count >= limit:
+                    print("Collected %d message IDs; stopping" % count)
+                    break
+        except errors.HttpError:
+            print("Errored on pageToken='%s'" %
+                  list_kwargs.get('nextPageToken', 'None!'))
+            raise
 
-    def get_email(gmail, msg_id, format='full', user_id='me'):
-        """Download an email in Google's pre-hierarchied format.
+        print("Retrieved %d total message IDs in %.3f seconds" %
+              (count, time.clock() - start))
+        return messages
+
+    def get_email(self, msg_id, format='full', user_id='me'):
+        """Download a Users.Message resource, i.e. Gmail's format for email.
 
         https://developers.google.com/gmail/api/v1/reference/users/messages/get
 
         Returns:
             https://developers.google.com/gmail/api/v1/reference/users/messages
         """
-        msg = gmail.users().messages().get(
+        msg = self.service.users().messages().get(
             userId=user_id, id=msg_id, format=format
         ).execute()
         # Convert raw emails into Python objects
@@ -153,6 +183,34 @@ class Gmail:
             msg_str = base64.urlsafe_b64decode(msg['raw']).decode()
             return email.message_from_string(msg_str)
         return msg
+
+    def download_emails(self, msgs, step=10):
+        """Download the raw email bodies and modify in-place.
+
+        Args:
+            msgs: List of results from list_messages; dicts containing 'msgId'
+                and 'threadId'.
+            interval (int): How often to report on progress.
+        """
+        try:
+            n_msgs = len(msgs)
+            start, step_start = time.clock()
+            skip = 0
+            for i, m in enumerate(msgs):
+                if 'raw' in m:
+                    skip += 1
+                    continue
+                m['raw'] = self.get_email(m['id'])
+                if i % step == 0:
+                    print("\r{:.2f}% complete in {:.3f} seconds "
+                          "({:d} emails retrieved, avg. {.2f} seconds / email)"
+                          .format(i / n_msgs * 100., time.clock() - start, i,
+                                  time.clock() - step_start),
+                          end='')
+                    step_start = time.clock()
+        finally:
+            print("{:d} emails retrieved in {:.2f} seconds"
+                  .format(i - skip, time.clock() - start))
 
 
 # Utility functions
