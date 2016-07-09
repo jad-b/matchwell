@@ -1,19 +1,19 @@
+from collections import namedtuple
+
 import pytest
 
-from matchwell.gmail import Gmail
+from matchwell import gmail
 
 
 @pytest.yield_fixture(scope='session')
-def gmail():
-    gmail = Gmail()
-    gmail.connect()
-    yield gmail
+def service():
+    yield gmail.Gmail().connect()
 
 
-def test_create_label(gmail, data):
+def test_create_label(service, data):
     # Setup a test label
     TEST_LABEL_NAME = 'TestLabel'
-    test_label = gmail.create_label(TEST_LABEL_NAME)
+    test_label = service.create_label(TEST_LABEL_NAME)
     # Randomly sample a row from our data
     test_email = data.sample(n=1)
     test_email_id = test_email.id.values[0]
@@ -21,13 +21,32 @@ def test_create_label(gmail, data):
     assert test_label not in test_email.email.values[0]['labelIds']
 
     # Execute
-    recv = gmail.add_gmail_labels(test_email_id,
-                                  labels=[test_label['id']])
+    recv = service.add_gmail_labels(test_email_id,
+                                    labels=[test_label['id']])
 
     # Assert
     assert test_label['id'] in recv['labelIds'], recv['labelIds']
 
 
-def test_list_messages(gmail):
-    msgs = gmail.list_messages()
+def test_list_messages(service):
+    msgs = service.list_messages()
     assert len(msgs) > 0
+
+
+def test_get_datetime():
+    TC = namedtuple('TestCase', ('msg', 'as_numpy', 'exp'))
+    testcases = [
+        TC(**{
+            'msg': {'internalDate': '1467232146000'},
+            'as_numpy': True,
+            'exp': '2016-06-29T20:29:06.000000000',
+        }),
+        TC(**{
+            'msg': {'internalDate': '1467227159000'},
+            'as_numpy': False,
+            'exp': '2016-06-29T19:05:59.000000000',
+        }),
+    ]
+    for tc in testcases:
+        obs = gmail.get_datetime(tc.msg, tc.as_numpy)
+        assert str(obs) == tc.exp

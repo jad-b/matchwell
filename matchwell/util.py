@@ -23,11 +23,16 @@ def tree(struct, filtr=''):
 
 
 def build_prefix_tree(words, delim='/'):
+    """Create a path tree using nested dictionaries.
+
+    A "path" here is defined here as a series of words, separated by a
+    delimiter. Each
+    """
     trie = {}
     for w in words:
         # print("Splitting", w)
         parts = w.split(delim)
-        d = trie
+        d = trie  # Essentially a pointer within our tree.
         for p in parts:
             # print("\tPlacing", p)
             d.setdefault(p, {})

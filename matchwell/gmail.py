@@ -9,8 +9,10 @@ import email
 import json
 import os
 import time
+from datetime import datetime
 
 import httplib2
+import numpy as np
 import oauth2client
 from apiclient import discovery, errors
 from bs4 import BeautifulSoup
@@ -89,6 +91,17 @@ class Gmail:
                 lbl['name']: lbl['id'] for lbl in response['labels']
                 if lbl['name'] in labels
             }
+        except errors.HttpError:
+            raise
+
+    def get_label_maps(self):
+        """Build a ID=>Name & Name=>ID mapping for labels"""
+        try:
+            response = self.service.users().labels().list(
+                    userId=self.user
+                    ).execute()
+            return ({lbl['name']: lbl['id'] for lbl in response['labels']},
+                    {lbl['id']: lbl['name'] for lbl in response['labels']})
         except errors.HttpError:
             raise
 
@@ -232,6 +245,25 @@ def extract_gmail_text(payload):
     # Else, recurse
     for part in payload.get('parts', []):
         return extract_gmail_text(part)
+
+
+def get_datetime(message, numpy=True):
+    """Extract the datetime from the Gmail message.
+
+    Args:
+        message (dict): Message to pull the datetime from.
+        numpy (bool): Output as :class:`numpy.datetime64`, else
+            :class:`datetime.datetime`.
+    Returns:
+        :class:`numpy.datetime64` if :arg:`numpy` is True, else
+        :class:`datetime.datetime`.
+    """
+    # Convert from milliseconds to seconds
+    epoch = int(message['internalDate']) / 1e3
+    dt = datetime.utcfromtimestamp(epoch)
+    if numpy:
+        return np.datetime64(dt.isoformat())
+    return dt
 
 
 def extract_by_mimetype(msg, mimetype='text/plain'):
