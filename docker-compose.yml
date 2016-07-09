@@ -9,6 +9,7 @@ services:
       DISPLAY: ${DISPLAY}
     volumes:
       - ./:/src
+      - ~/.credentials:/home/jovyan/.credentials
       - ~/.Xauthority:/home/jovyan/.Xauthority
       - /tmp/.X11-unix:/tmp/.X11-unix
     ipc: host
