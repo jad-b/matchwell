@@ -42,6 +42,10 @@ class Gmail:
         self.credentials = credentials
         self.user = user_id
         self.service = service
+        # Properties
+        self._labels = None
+        self._label_names = None
+        self._label_ids = None
 
     def connect(self):
         """Creates a Gmail API service object."""
@@ -81,29 +85,31 @@ class Gmail:
             print('Storing credentials to ' + credential_path)
         return credentials
 
-    def get_label_ids(self, labels=[]):
-        """Retrieve the label ID for each label."""
-        try:
-            response = self.service.users().labels().list(
-                    userId=self.user
-                    ).execute()
-            return {
-                lbl['name']: lbl['id'] for lbl in response['labels']
-                if lbl['name'] in labels
-            }
-        except errors.HttpError:
-            raise
-
-    def get_label_maps(self):
+    @property
+    def labels(self):
         """Build a ID=>Name & Name=>ID mapping for labels"""
-        try:
-            response = self.service.users().labels().list(
-                    userId=self.user
-                    ).execute()
-            return ({lbl['name']: lbl['id'] for lbl in response['labels']},
-                    {lbl['id']: lbl['name'] for lbl in response['labels']})
-        except errors.HttpError:
-            raise
+        if not self._labels:
+            try:
+                response = self.service.users().labels().list(
+                        userId=self.user
+                        ).execute()
+                self._labels = response['labels']
+            except errors.HttpError:
+                raise
+        return self._labels
+
+    @property
+    def label_names(self):
+        if not self._label_names:
+            self._label_names = {lbl['name']: lbl['id'] for lbl in
+                                 self._labels}
+        return self._label_names
+
+    @property
+    def label_ids(self):
+        if not self._label_ids:
+            self._label_ids = {lbl['id']: lbl['name'] for lbl in self._labels}
+        return self._label_ids
 
     def create_label(self, name):
         """Create or retrieve label, if already exists."""
@@ -125,12 +131,14 @@ class Gmail:
                             if l['name'] == name)
             raise
 
+    @property
+    def label_tree(self):
+        label_names = set([l['name'] for l in self.labels])
+        return util.build_prefix_tree(label_names)
+
     def print_label_tree(self):
         """Print a JSON representation of your label hierarchy."""
-        labels = self.service.users().labels().list(userId=self.user).execute()
-        label_names = set([l['name'] for l in labels['labels']])
-        label_tree = util.build_prefix_tree(label_names)
-        print(json.dumps(label_tree, indent=2))
+        print(json.dumps(self.label_tree, indent=2))
 
     def list_messages(self, label_ids=None, limit=None):
         """Retrieve a list of {msgId, threadId} by label ID(s).
