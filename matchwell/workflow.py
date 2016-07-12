@@ -24,7 +24,7 @@ The workflow looks like this:
 """
 import pandas as pd
 
-from matchwell.gmail import Gmail
+from matchwell import gmail as gml, util
 
 # Constants
 POS_LABEL = 'job-offers/yes'
@@ -48,7 +48,7 @@ def download_emails(gmail=None, df=None, labels=[]):
     else:
         assert reqd_columns in df.columns
     if gmail is None:
-        gmail = Gmail()  # Ctrl-Enter to save verification code
+        gmail = gml.Gmail()  # Ctrl-Enter to save verification code
     labels = [POS_LABEL, NEG_LABEL]
 
     # Get all labels, and build a map of label names => label IDs
@@ -64,7 +64,6 @@ def download_emails(gmail=None, df=None, labels=[]):
         tmpdf = pd.DataFrame(msgs)
         tmpdf['labelName'] = lbl
         df = df.append(tmpdf, ignore_index=True)
-    df.head()
 
     # Download each missing email by ID
     def get_emails(row):
@@ -72,12 +71,31 @@ def download_emails(gmail=None, df=None, labels=[]):
 
     # Retrieve each missing email
     df['email'] = df.apply(get_emails, axis=1)
-    df.head()
 
-    def fill_in_text(row):
-        return gmail.extract_gmail_text(row.email['payload'])
+    # Set index to timestamp
+    df['timestamp'] = df.apply(lambda x: gmail.get_datetime(x.raw, True),
+                               axis=1)
+    df = df.set_index('timestamp')
 
     # Extract text from the email
-    df['text'] = df.apply(fill_in_text, axis=1)
-    df.head()
-    df.to_json(DATAFILE)
+    df['text'] = df.apply(
+            lambda x: gmail.extract_gmail_text(x.email['payload']),
+            axis=1)
+
+    # Build mpapings of label names <=> IDs
+    name_id, id_name = gmail.get_label_maps()
+
+    # Translate IDs to string names
+    df['labels'] = df.apply(
+            lambda x: [id_name[lbl] for lbl in x.raw.get('labelIds', [])],
+            axis=1)
+
+    # Drop unwanted sources
+    blacklist = ['CHAT', 'SMS']
+    for blk in blacklist:
+        df = df.apply(
+            lambda x: util.contains_substring(blk, x['labels'], inverse=True),
+            axis=1)
+
+    # Remove null entries
+    df = df[df['text'].notnull()]
