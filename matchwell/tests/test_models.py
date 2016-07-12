@@ -25,7 +25,8 @@ def test_classifiers(X, y):
     )
     for clf in clfs:
         pl = build_pipeline(clf, X, y)
-        report(pl, X, y)
+        pred = pl.predict(X)
+        report(y, pred)
         cv_scores(pl, X, y)
 
 

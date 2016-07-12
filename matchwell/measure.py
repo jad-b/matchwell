@@ -4,10 +4,11 @@ from scipy.special import expit
 from sklearn import metrics, cross_validation
 
 
-def report(pred, y):
-    accuracy = np.mean(pred == y) * 100.
-    print("{:.2f}% accuracy on the training set".format(accuracy))
-    print("Classification Report\n", metrics.classification_report(y, pred))
+def report(y, pred, labels=()):
+    print("{:.2f}% accuracy on the training set"
+          .format(metrics.accuracy_score(y, pred)))
+    print("Classification Report\n",
+          metrics.classification_report(y, pred, target_names=labels))
     print("Confusion Matrix\n", metrics.confusion_matrix(y, pred))
 
 
