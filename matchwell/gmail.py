@@ -100,15 +100,15 @@ class Gmail:
 
     @property
     def label_names(self):
-        if not self._label_names:
+        if self._label_names:
             self._label_names = {lbl['name']: lbl['id'] for lbl in
-                                 self._labels}
+                                 self.labels}
         return self._label_names
 
     @property
     def label_ids(self):
         if not self._label_ids:
-            self._label_ids = {lbl['id']: lbl['name'] for lbl in self._labels}
+            self._label_ids = {lbl['id']: lbl['name'] for lbl in self.labels}
         return self._label_ids
 
     def create_label(self, name):

@@ -10,6 +10,7 @@ def service():
     yield gmail.Gmail().connect()
 
 
+@pytest.mark.skip(reason='Need to generate sample data')
 def test_create_label(service, data):
     # Setup a test label
     TEST_LABEL_NAME = 'TestLabel'
@@ -28,6 +29,7 @@ def test_create_label(service, data):
     assert test_label['id'] in recv['labelIds'], recv['labelIds']
 
 
+@pytest.mark.skip(reason='Expensive operation')
 def test_list_messages(service):
     msgs = service.list_messages()
     assert len(msgs) > 0
@@ -39,7 +41,7 @@ def test_get_datetime():
         TC(**{
             'msg': {'internalDate': '1467232146000'},
             'as_numpy': True,
-            'exp': '2016-06-29T20:29:06.000000000',
+            'exp': '2016-06-29T20:29:06+0000',
         }),
         TC(**{
             'msg': {'internalDate': '1467227159000'},
