@@ -35,6 +35,13 @@ def test_list_messages(service):
     assert len(msgs) > 0
 
 
+# GmailSource tests
+def test_gmail_source():
+    gs = gmail.GmailSource()
+    assert gs.name == 'gmail'
+
+
+# Utility function tests
 def test_get_datetime():
     TC = namedtuple('TestCase', ('msg', 'as_numpy', 'exp'))
     testcases = [

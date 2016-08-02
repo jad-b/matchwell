@@ -1,2 +1,3 @@
 # matchwell
-Classify hierarchies of labeled text
+
+A classifier for hierarchies of labeled text.

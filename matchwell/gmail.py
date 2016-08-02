@@ -19,6 +19,7 @@ from bs4 import BeautifulSoup
 from oauth2client import client, tools
 
 from matchwell import util
+from matchwell.source import Sourcerer
 
 
 class Gmail:
@@ -140,12 +141,13 @@ class Gmail:
         """Print a JSON representation of your label hierarchy."""
         print(json.dumps(self.label_tree, indent=2))
 
-    def list_messages(self, label_ids=None, limit=None):
+    def list_messages(self, label_ids=None, limit=None, query=None):
         """Retrieve a list of {msgId, threadId} by label ID(s).
 
         No label ID means *all* messages.
         """
-        list_kwargs = {'userId': self.user}
+        list_kwargs = {'userId': self.user,
+                       'query': query}
         if label_ids is not None:
             list_kwargs['labelIds'] = label_ids
             print("Retrieving all messages with label ID(s) '{}'"
@@ -232,6 +234,34 @@ class Gmail:
         finally:
             print("{:d} emails retrieved in {:.2f} seconds"
                   .format(i - skip, time.clock() - start))
+
+
+class GmailSource(Sourcerer):
+    name = 'gmail'
+
+    def __init__(self, gmail=None):
+        self.gmail = gmail
+
+    def pull(self, df=None, only_newer=False, **kwargs):
+        """Retrieve emails not found within the dataframe."""
+        if self.gmail is None:  # Initialize
+            self.gmail = Gmail()
+        if df is None:
+            df = util.new_data_frame()
+        if only_newer:
+            # newest = df.sort(ascending=False)['timestamp'][0]
+            # TODO(jdb) Newest needs to be as YYYY/MM/DD
+            newest = ''
+            query = 'after:' + str(newest)
+        else:
+            query = None
+        stream = self.gmail.list_messages(self, query=query)
+        for msg in stream:  # While messages to retrieve:
+            pass
+            # 1) Load missing into dataframe
+            # 2) Download missing messages in chunk
+            # self.gmail.get_email(missing)
+        return df
 
 
 # Utility functions

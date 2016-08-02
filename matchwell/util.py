@@ -2,6 +2,31 @@ import re
 import itertools
 from collections import Iterable
 
+import pandas as pd
+
+
+def new_data_frame():
+    """Returns a pre-initialized :class:`pandas.DataFrame` with the correct
+    columns in place."""
+    return pd.DataFrame(
+        columns=[
+            'timestamp',
+            'type',
+            'source',
+            'raw',
+            'text',
+            'labels',
+        ],
+        dtype=[
+            'datetime64[ns]',
+            'str',
+            'str',
+            'str',
+            'str',
+            'object',
+        ]
+    )
+
 
 # String utiltities
 def contains_substrings(substrs, coll, inverse=False):
