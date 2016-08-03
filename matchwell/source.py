@@ -11,14 +11,9 @@ class Sourcerer(abc.ABC):
     name = None
 
     @abc.abstractmethod
-    def pull(self, df=None, **kwargs):
+    def pull(self, **kwargs):
         """Retrieve updates from the data source.
 
-        Args:
-            df(: class: `pandas.DataFrame`):
-                DataFrame to use as a base of reference.
-                Not providing one indicates a full copy from the source is to
-                be performed, if possible.
         Returns:
             A new :class:`pandas.DataFrame`, of only this source's type.
         """

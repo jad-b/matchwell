@@ -41,6 +41,11 @@ def test_gmail_source():
     assert gs.name == 'gmail'
 
 
+def test_gmail_source_pull():
+    gs = gmail.GmailSource()
+    gs.pull()
+
+
 # Utility function tests
 def test_get_datetime():
     TC = namedtuple('TestCase', ('msg', 'as_numpy', 'exp'))

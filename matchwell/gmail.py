@@ -14,6 +14,7 @@ from datetime import datetime
 import httplib2
 import numpy as np
 import oauth2client
+import pandas as pd
 from apiclient import discovery, errors
 from bs4 import BeautifulSoup
 from oauth2client import client, tools
@@ -155,7 +156,7 @@ class Gmail:
         else:
             print("Retrieving ALL messages")
 
-        messages, start = [], time.clock()
+        start = time.clock()
         try:
             response = self.service.users().messages().list(
                     **list_kwargs
@@ -163,9 +164,9 @@ class Gmail:
 
             count = 0
             if 'messages' in response:
-                messages.extend(response['messages'])
                 print("Retrieved %d message IDs in %.3f seconds" %
                       (response['resultSizeEstimate'], time.clock() - start))
+                yield response['messages']
                 count += response['resultSizeEstimate']
 
             while 'nextPageToken' in response:
@@ -174,10 +175,10 @@ class Gmail:
                 response = self.service.users().messages().list(
                         **list_kwargs
                     ).execute()
-                messages.extend(response['messages'])
-                count += response['resultSizeEstimate']
                 print("Retrieved another %d message IDs in %.3f seconds" %
                       (response['resultSizeEstimate'], time.clock() - now))
+                yield response['messages']
+                count += response['resultSizeEstimate']
                 if limit is not None and count >= limit:
                     print("Collected %d message IDs; stopping" % count)
                     break
@@ -188,7 +189,6 @@ class Gmail:
 
         print("Retrieved %d total message IDs in %.3f seconds" %
               (count, time.clock() - start))
-        return messages
 
     def get_email(self, msg_id, format='full', user_id='me'):
         """Download a Users.Message resource, i.e. Gmail's format for email.
@@ -207,60 +207,89 @@ class Gmail:
             return email.message_from_string(msg_str)
         return msg
 
-    def download_emails(self, msgs, step=10):
-        """Download the raw email bodies and modify in-place.
+    def download_emails(self, msgs):
+        """Download the raw emails.
 
         Args:
             msgs: List of results from list_messages; dicts containing 'msgId'
                 and 'threadId'.
-            interval (int): How often to report on progress.
+        Returns:
+            List[:class:`users.messages.Resource`]: List of full-format emails.
         """
-        try:
-            n_msgs = len(msgs)
-            start, step_start = time.clock()
-            skip = 0
-            for i, m in enumerate(msgs):
-                if 'raw' in m:
-                    skip += 1
-                    continue
-                m['raw'] = self.get_email(m['id'])
-                if i % step == 0:
-                    print("\r{:.2f}% complete in {:.3f} seconds "
-                          "({:d} emails retrieved, avg. {.2f} seconds / email)"
-                          .format(i / n_msgs * 100., time.clock() - start, i,
-                                  time.clock() - step_start),
-                          end='')
-                    step_start = time.clock()
-        finally:
-            print("{:d} emails retrieved in {:.2f} seconds"
-                  .format(i - skip, time.clock() - start))
+        if len(msgs) > 1000:
+            print("Can only batch <=1000 downloads at a time")
+            return
+        emails = []
+
+        def callback(request_id, response, exception):
+            if exception is not None:
+                pass
+            else:
+                emails.append(response)
+
+        batch = self.service.new_batch_http_request()
+        for msg in msgs:
+            batch.add(
+                self.serivce.users().messages().get(
+                    userId='me', id=msg['id'], format='full'
+                )
+            )
+        batch.execute()
+        return emails
 
 
 class GmailSource(Sourcerer):
     name = 'gmail'
 
     def __init__(self, gmail=None):
-        self.gmail = gmail
+        self._gmail = gmail
 
-    def pull(self, df=None, only_newer=False, **kwargs):
-        """Retrieve emails not found within the dataframe."""
-        if self.gmail is None:  # Initialize
-            self.gmail = Gmail()
-        if df is None:
-            df = util.new_data_frame()
-        if only_newer:
-            # newest = df.sort(ascending=False)['timestamp'][0]
-            # TODO(jdb) Newest needs to be as YYYY/MM/DD
-            newest = ''
-            query = 'after:' + str(newest)
+    @property
+    def gmail(self):
+        if self._gmail is None:  # Initialize
+            self._gmail = Gmail()
+        return self._gmail
+
+    def pull(self, newer_than=None, **kwargs):
+        """Retrieve emails."""
+        if newer_than is not None:
+            query = 'after:' + newer_than
         else:
             query = None
-        stream = self.gmail.list_messages(self, query=query)
-        for msg in stream:  # While messages to retrieve:
-            pass
-            # 1) Load missing into dataframe
-            # 2) Download missing messages in chunk
-            # self.gmail.get_email(missing)
+
+        return self._transform(self._extract(query))
+
+    def _extract(self, query):
+        messages = []
+        for msgs in self.gmail.list_messages(self, query=query):
+            messages.extend(self.gmail.download_emails(msgs))
+        return messages
+
+    def _transform(self, messages):
+        df = pd.DataFrame()
+        df['raw'] = messages
+        df['timestamp'] = df.apply(lambda x: get_datetime(x.raw, True), axis=1)
+        df.set_index('timestamp')
+        df['type'] = self.name
+        df['text'] = df.apply(
+            lambda x: extract_gmail_text(x.raw['payload']), axis=1)
+        # Remove null entries
+        df = df[df['text'].notnull()]
+        # Translate IDs to string names
+        df['labels'] = df.apply(
+            lambda x: [self.gmail.label_ids[lbl] for lbl
+                       in x.raw.get('labelIds', [])],
+            axis=1)
+        # Drop unwanted labels
+        blacklist = ['CHAT', 'SMS']
+        for blk in blacklist:
+            df = df.apply(
+                lambda x: util.contains_substring(blk, x['labels'],
+                                                  inverse=True),
+                axis=1)
+        # Message id serves as the unique ID for the message;
+        # could turn into the full URL
+        df['id'] = df.apply(lambda x: x.raw['id'], axis=1)
         return df
 
 

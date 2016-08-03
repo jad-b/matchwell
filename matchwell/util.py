@@ -12,7 +12,7 @@ def new_data_frame():
         columns=[
             'timestamp',
             'type',
-            'source',
+            'id',
             'raw',
             'text',
             'labels',
