@@ -1,8 +1,20 @@
+import base64
+import uuid
 from collections import namedtuple
+from unittest.mock import patch
 
 import pytest
+import pandas as pd
 
 from matchwell import gmail
+from matchwell.gmail import GmailSource
+
+
+def junk(n=12):
+    """Create a random string of length _n_."""
+    b = str(uuid.uuid4()).encode()
+    s = base64.b64encode(b).decode()
+    return s[:n]
 
 
 @pytest.yield_fixture(scope='session')
@@ -36,14 +48,27 @@ def test_list_messages(service):
 
 
 # GmailSource tests
-def test_gmail_source():
+def test_gmail_source_initialization():
     gs = gmail.GmailSource()
     assert gs.name == 'gmail'
 
 
-def test_gmail_source_pull():
+@patch.object(GmailSource, '_transform', autospec=True)
+@patch.object(GmailSource, '_extract', autospec=True)
+def test_gmail_source_extract(mock_ex, mock_tf):
     gs = gmail.GmailSource()
-    gs.pull()
+    messages = [
+        {'id': junk(), 'threadId': junk()},
+        {'id': junk(), 'threadId': junk()},
+        {'id': junk(), 'threadId': junk()},
+    ]
+    mock_ex.return_value = messages
+    mock_tf.return_value = pd.DataFrame()
+
+    gs.pull(newer_than='1988/12/14')
+
+    mock_ex.assert_called_with(gs, 'after:1988/12/14')
+    mock_tf.assert_called_with(gs, messages)
 
 
 # Utility function tests
@@ -58,7 +83,7 @@ def test_get_datetime():
         TC(**{
             'msg': {'internalDate': '1467227159000'},
             'as_numpy': False,
-            'exp': '2016-06-29T19:05:59.000000000',
+            'exp': '2016-06-29 19:05:59',
         }),
     ]
     for tc in testcases:
