@@ -145,7 +145,13 @@ class Gmail:
     def list_messages(self, label_ids=None, limit=None, query=None):
         """Retrieve a list of {msgId, threadId} by label ID(s).
 
-        No label ID means *all* messages.
+        Args:
+            label_ids (List[str]): List of specific label IDs to retrieve. None
+                implies messages of *any* labels should be retrieved.
+            limit (int): Total number of messages to collect.
+            query (str): Gmail query string.
+        Returns:
+           List(dict)
         """
         list_kwargs = {'userId': self.user,
                        'query': query}

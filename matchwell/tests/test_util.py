@@ -1,4 +1,8 @@
 import random
+from datetime import datetime
+
+import pandas as pd
+import pytest
 
 from matchwell import util, tree
 
@@ -14,6 +18,34 @@ TEST_LABELS = [
     'A/D/H',
     'A/D/I'
 ]
+
+
+def test_new_data_frame():
+    df = util.new_data_frame()
+    cols = [
+        'timestamp',
+        'type',
+        'id',
+        'raw',
+        'text',
+        'labels',
+    ]
+    for c in cols:
+        assert c in df.columns
+
+
+@pytest.yield_fixture()
+def df():
+    yield util.new_data_frame()
+
+
+def test_newest(df):
+    ts1 = pd.Timestamp(datetime(2016, 8, 8))
+    ts2 = pd.Timestamp(datetime(2006, 8, 8))
+    df.loc[ts1] = None
+    df.loc[ts2] = None
+    assert util.newest(df) == ts1
+    assert util.newest(df, format=True) == "2016/08/08"
 
 
 def test_collapse_unique():

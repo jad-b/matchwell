@@ -16,16 +16,16 @@ def new_data_frame():
             'raw',
             'text',
             'labels',
-        ],
-        dtype=[
-            'datetime64[ns]',
-            'str',
-            'str',
-            'str',
-            'str',
-            'object',
         ]
     )
+
+
+def newest(df, format=False):
+    """Return the newest timestamp from a :class:`pandas.DataFrame`."""
+    ts = df.sort_index(ascending=False).index[0]
+    if format:
+        return ts.strftime("%Y/%m/%d")
+    return ts
 
 
 # String utiltities

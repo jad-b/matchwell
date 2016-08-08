@@ -1,4 +1,5 @@
 import base64
+import itertools
 import uuid
 from collections import namedtuple
 from unittest.mock import patch
@@ -55,12 +56,12 @@ def test_gmail_source_initialization():
 
 @patch.object(GmailSource, '_transform', autospec=True)
 @patch.object(GmailSource, '_extract', autospec=True)
-def test_gmail_source_extract(mock_ex, mock_tf):
+def test_gmail_source_pull(mock_ex, mock_tf):
     gs = gmail.GmailSource()
     messages = [
-        {'id': junk(), 'threadId': junk()},
-        {'id': junk(), 'threadId': junk()},
-        {'id': junk(), 'threadId': junk()},
+        {'msgId': junk(), 'threadId': junk()},
+        {'msgId': junk(), 'threadId': junk()},
+        {'msgId': junk(), 'threadId': junk()},
     ]
     mock_ex.return_value = messages
     mock_tf.return_value = pd.DataFrame()
@@ -69,6 +70,24 @@ def test_gmail_source_extract(mock_ex, mock_tf):
 
     mock_ex.assert_called_with(gs, 'after:1988/12/14')
     mock_tf.assert_called_with(gs, messages)
+
+
+@patch('matchwell.gmail.Gmail', autospec=True)
+def test_gmail_source_extract(mock_gmail):
+    gs = gmail.GmailSource()
+    id_list = [
+        [{'msgId': junk(), 'threadId': junk()}],
+        [{'msgId': junk(), 'threadId': junk()}],
+        [{'msgId': junk(), 'threadId': junk()}],
+    ]
+    msg_list = [[{'id': m[0]['msgId']}] for m in id_list]
+    # Mock the continuous yield of the generator list_messages
+    mock_gmail.return_value.list_messages.return_value = iter(id_list)
+    mock_gmail.return_value.download_emails.side_effect = msg_list
+
+    exp = list(itertools.chain.from_iterable(msg_list))
+    obs = gs._extract(query=None)
+    assert obs == exp
 
 
 # Utility function tests
