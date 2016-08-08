@@ -154,7 +154,7 @@ class Gmail:
            List(dict)
         """
         list_kwargs = {'userId': self.user,
-                       'query': query}
+                       'q': query}
         if label_ids is not None:
             list_kwargs['labelIds'] = label_ids
             print("Retrieving all messages with label ID(s) '{}'"
@@ -253,7 +253,7 @@ class GmailSource(Sourcerer):
     @property
     def gmail(self):
         if self._gmail is None:  # Initialize
-            self._gmail = Gmail()
+            self._gmail = Gmail().connect()
         return self._gmail
 
     def pull(self, newer_than=None, **kwargs):
