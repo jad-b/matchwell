@@ -155,12 +155,14 @@ class Gmail:
         """
         list_kwargs = {'userId': self.user,
                        'q': query}
+        if query is not None:
+            print("Retrieving messages newer than %s" % query)
         if label_ids is not None:
             list_kwargs['labelIds'] = label_ids
             print("Retrieving all messages with label ID(s) '{}'"
                   .format(label_ids))
         else:
-            print("Retrieving ALL messages")
+            print("Retrieving messages with *any* label")
 
         start = time.clock()
         try:
@@ -233,14 +235,15 @@ class Gmail:
             else:
                 emails.append(response)
 
-        batch = self.service.new_batch_http_request()
+        batch = self.service.new_batch_http_request(callback=callback)
         for msg in msgs:
             batch.add(
-                self.serivce.users().messages().get(
+                self.service.users().messages().get(
                     userId='me', id=msg['id'], format='full'
                 )
             )
         batch.execute()
+        print("Downloaded %d emails" % len(emails))
         return emails
 
 
@@ -249,6 +252,8 @@ class GmailSource(Sourcerer):
 
     def __init__(self, gmail=None):
         self._gmail = gmail
+        self.raw = None
+        self.transformed = None
 
     @property
     def gmail(self):
@@ -259,6 +264,7 @@ class GmailSource(Sourcerer):
     def pull(self, newer_than=None, **kwargs):
         """Retrieve emails."""
         if newer_than is not None:
+            print('Retrieving messages newer than %s' % newer_than)
             query = 'after:' + newer_than
         else:
             query = None
@@ -267,12 +273,13 @@ class GmailSource(Sourcerer):
 
     def _extract(self, query):
         messages = []
-        for msgs in self.gmail.list_messages(self, query=query):
+        for msgs in self.gmail.list_messages(query=query):
             messages.extend(self.gmail.download_emails(msgs))
+        self.raw = messages
         return messages
 
     def _transform(self, messages):
-        df = pd.DataFrame()
+        self.transformed = df = pd.DataFrame()
         df['raw'] = messages
         df['timestamp'] = df.apply(lambda x: get_datetime(x.raw, True), axis=1)
         df.set_index('timestamp')
@@ -281,18 +288,18 @@ class GmailSource(Sourcerer):
             lambda x: extract_gmail_text(x.raw['payload']), axis=1)
         # Remove null entries
         df = df[df['text'].notnull()]
+
+        # TODO Collapse the following two applies into one step
         # Translate IDs to string names
-        df['labels'] = df.apply(
+        df['labels'] = df['raw'].apply(
             lambda x: [self.gmail.label_ids[lbl] for lbl
-                       in x.raw.get('labelIds', [])],
-            axis=1)
+                       in x.get('labelIds', [])]
+        )
         # Drop unwanted labels
         blacklist = ['CHAT', 'SMS']
         for blk in blacklist:
-            df = df.apply(
-                lambda x: util.contains_substring(blk, x['labels'],
-                                                  inverse=True),
-                axis=1)
+            df['labels'] = df['labels'].apply(
+                lambda x: [lbl for lbl in x if lbl != blk])
         # Message id serves as the unique ID for the message;
         # could turn into the full URL
         df['id'] = df.apply(lambda x: x.raw['id'], axis=1)
